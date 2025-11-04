@@ -1,6 +1,4 @@
-// Test simple du décodeur ChirpStack v4
-// Copier ce code dans ChirpStack Application → Device Profiles → Codec
-
+/
 function decodeUplink(input) {
     const bytes = input.bytes;
     const fPort = input.fPort;
@@ -15,36 +13,36 @@ function decodeUplink(input) {
     const type = bytes[0];
     
     if (type === 0x05 && bytes.length === 12) {
-        // Format étendu avec QMP6988: T+H+P+Alt+Batt+Solar
         
-        // Température (°C, signé, x100)
+        
+        // Temperature (°C, signed, x100)
         let temp_raw = (bytes[1] << 8) | bytes[2];
         if (temp_raw > 32767) temp_raw -= 65536;
         decoded.temperature = temp_raw / 100;
         
-        // Humidité (%, x100)
+        // Humidity (%, x100)
         const hum_raw = (bytes[3] << 8) | bytes[4];
         decoded.humidity = hum_raw / 100;
         
-        // Pression (hPa, x10)
+        // Pressure (hPa, x10)
         const pressure_raw = (bytes[5] << 8) | bytes[6];
         decoded.pressure = pressure_raw / 10;
         
-        // Altitude (m, signé)
+        // Altitude (m, signed)
         let alt_raw = (bytes[7] << 8) | bytes[8];
         if (alt_raw > 32767) alt_raw -= 65536;
         decoded.altitude = alt_raw;
         
-        // Batterie (%)
+        // Battery (%)
         decoded.battery_percent = bytes[9];
         
-        // Tension solaire (V, mV)
+        // Solar voltage (V, mV)
         const solar_mv = (bytes[10] << 8) | bytes[11];
         decoded.solar_voltage = solar_mv / 1000;
         
-        // Calculs supplémentaires
+        // Additional calculations
         
-        // Pression niveau mer
+        // Sea level pressure
         if (decoded.altitude > 0) {
             const factor = Math.pow(1 - (0.0065 * decoded.altitude) / (decoded.temperature + 273.15), -5.257);
             decoded.sea_level_pressure = Math.round(decoded.pressure / factor * 10) / 10;
@@ -52,7 +50,7 @@ function decodeUplink(input) {
             decoded.sea_level_pressure = decoded.pressure;
         }
         
-        // Indice de confort
+        // Comfort index
         if (decoded.temperature >= 18 && decoded.temperature <= 24 && 
             decoded.humidity >= 40 && decoded.humidity <= 60) {
             decoded.comfort_index = "Optimal";
@@ -65,7 +63,7 @@ function decodeUplink(input) {
             decoded.comfort_index = "Inconfortable";
         }
         
-        // État météo
+        // Weather state
         if (decoded.pressure > 1020) {
             decoded.weather_state = "Stable";
         } else if (decoded.pressure > 1013) {
@@ -81,7 +79,7 @@ function decodeUplink(input) {
         decoded.payload_type = "weather_extended";
         
     } else if (type === 0x04 && bytes.length === 8) {
-        // Format basique: T+H+Batt+Solar
+        // Basic format: T+H+Batt+Solar
         
         let temp_raw = (bytes[1] << 8) | bytes[2];
         if (temp_raw > 32767) temp_raw -= 65536;
@@ -100,7 +98,7 @@ function decodeUplink(input) {
     } else {
         return {
             data: { 
-                error: "Type de payload non supporté",
+                error: "Unsupported payload type",
                 type: type,
                 length: bytes.length
             }

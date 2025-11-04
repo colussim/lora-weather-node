@@ -28,7 +28,7 @@
 
 // OTAA credentials
 const char APP_EUI[] = "9182d1372de0164c";
-const char APP_KEY[] = "8f502190daf76de4da4e236bb2d96b2c";
+const char APP_KEY[] = "";
 
 // Instances M5Stack ENV
 DFRobot_LWNode_IIC node(APP_EUI, APP_KEY);

@@ -428,14 +428,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 
 
-## 🙏 Acknowledgments
-
-- **DFRobot** for excellent ESP32 and LoRa hardware
-- **M5Stack** for reliable environmental sensors
-- **ChirpStack** for robust LoRaWAN infrastructure
-- **Home Assistant** community for integration support
-- **MCCI** for the excellent LMIC library
+## Ressources
 
 ---
-
-⭐ **Star this repository if it helped you build your own weather station!**

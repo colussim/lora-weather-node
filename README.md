@@ -310,7 +310,7 @@ temperature += TEMP_OFFSET;
   Humidity: 64.7%
   Pressure: 1013.2 hPa
   Altitude: 247 m
-  Battery: 87% (4.021V)
+  Battery: 87% (3.805V)
   Solar: 5.8V
 
 📡 Sending LoRaWAN data...
@@ -426,7 +426,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open Pull Request
 
-
+---
 
 ## Ressources
 

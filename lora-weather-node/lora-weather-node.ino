@@ -22,13 +22,13 @@
 #define SOLAR_PIN 36
 
 // Deep Sleep Configuration
-#define SLEEP_MINUTES 15          // 15 min entre transmissions
-#define uS_TO_S_FACTOR 1000000    // Conversion µs vers s
+#define SLEEP_MINUTES 15          // 15 minutes between transmissions
+#define uS_TO_S_FACTOR 1000000    // Conversion from µs to s
 #define SLEEP_TIME_S (SLEEP_MINUTES * 60)
 
 // OTAA credentials
-const char APP_EUI[] = "xxxxx";
-const char APP_KEY[] = "xxxxx";
+const char APP_EUI[] = "XXXXXXXX";
+const char APP_KEY[] = "XXXXXXXX";
 
 // Instances M5Stack ENV
 DFRobot_LWNode_IIC node(APP_EUI, APP_KEY);
@@ -81,13 +81,13 @@ bool initFuelGauge() {
         FuelGauge.quickstart();
         delay(1000);  // Wait for calibration
 
-        // 3. Initial reading
-        float voltage = FuelGauge.voltage();
-        float percent = FuelGauge.percent();
+    // 3. Initial reading (note: FuelGauge.voltage() returns mV)
+    float voltage = FuelGauge.voltage() / 1000.0; // convert mV -> V
+    float percent = FuelGauge.percent();
         
-        Serial.print("📊 Initial reading - Battery: "); 
-        Serial.print(percent, 1); Serial.print("% (");
-        Serial.print(voltage, 3); Serial.println("V)");
+    Serial.print("📊 Initial reading - Battery: "); 
+    Serial.print(percent, 1); Serial.print("% (");
+    Serial.print(voltage, 3); Serial.println("V)");
 
         // 4. If the percentage is still 0 with voltage > 3.7V, force an estimate
         if (percent < 1.0 && voltage > 3.7) {
@@ -103,10 +103,10 @@ bool initFuelGauge() {
             FuelGauge.setThreshold(10);
         }
         
-        // 5. Final reading after configuration
-        delay(500);
-        voltage = FuelGauge.voltage();
-        percent = FuelGauge.percent();
+    // 5. Final reading after configuration
+    delay(500);
+    voltage = FuelGauge.voltage() / 1000.0; // convert mV -> V
+    percent = FuelGauge.percent();
         
         Serial.print("✅ Final reading - Battery: "); 
         Serial.print(percent, 1); Serial.print("% (");
@@ -125,7 +125,7 @@ bool initFuelGauge() {
 
 // Function for manual estimation based on voltage
 float estimateBatteryPercent(float voltage) {
-    // Courbe de décharge LiPo 3.7V typique
+    // Typical LiPo 3.7V discharge curve
     if (voltage >= 4.15) return 100.0;
     if (voltage >= 4.00) return 90.0 + (voltage - 4.00) * 66.7;  // 90-100%
     if (voltage >= 3.90) return 70.0 + (voltage - 3.90) * 200.0; // 70-90%
@@ -138,49 +138,96 @@ float estimateBatteryPercent(float voltage) {
 
 float readBatteryVoltage() {
     if (!fuelGaugePresent) return 0.0;
-    return FuelGauge.voltage();
+    // The library returns millivolts — convert to volts for callers
+    return FuelGauge.voltage() / 1000.0;
 }
 
 uint8_t readBatteryPercent() {
     // Always try to read the MAX17043, even if fuelGaugePresent is false.
     float percent = 0.0;
+    float percentConstrained = 0.0;
     float voltage = 0.0;
 
     // Test communication with the MAX17043
     Wire.beginTransmission(0x36);
     if (Wire.endTransmission() == 0) {
         // MAX17043 responds, try to read data
-        percent = FuelGauge.percent();
-        voltage = FuelGauge.voltage();
+    percent = FuelGauge.percent();            // Raw percentage (can be >100% or <0%)
+    percentConstrained = FuelGauge.percent(true);  // Constrained to 0-100%
+    // Convert voltage from mV to V
+    voltage = FuelGauge.voltage() / 1000.0;
         
-        Serial.print("🔋 MAX17043 raw: "); Serial.print(percent, 1);
-        Serial.print("% ("); Serial.print(voltage, 3); Serial.println("V)");
+    Serial.print("🔋 MAX17043 raw: "); Serial.print(percent, 2);
+    Serial.print("% (constrained: "); Serial.print(percentConstrained, 2);
+    Serial.print("%) voltage: "); Serial.print(voltage, 3); Serial.println(" V");
     } else {
         Serial.println("❌ MAX17043 communication failed");
         return 0; // No sensor available
     }
 
+    // Calculate expected percentage from voltage
+    float estimated = estimateBatteryPercent(voltage);
+    
     // Check if the MAX17043 reading is consistent
-    bool percentValid = (percent >= 0 && percent <= 100 && !isnan(percent));
     bool voltageRealistic = (voltage > 3.0 && voltage < 4.5);
     
-    if (!percentValid || !voltageRealistic) {
-        Serial.println("⚠️ MAX17043 invalid reading, using voltage estimation");
-        return (uint8_t)round(estimateBatteryPercent(voltage));
+    if (!voltageRealistic) {
+        Serial.println("⚠️ MAX17043 voltage unrealistic, using estimation");
+        return (uint8_t)round(estimated);
     }
 
-    // If the MAX17043 shows 0% but voltage > 3.7V, use the estimation
-    if (percent < 1.0 && voltage > 3.7) {
-        Serial.print("🔄 MAX17043 shows "); Serial.print(percent, 1);
+    // Check if MAX17043 reading is reasonable compared to voltage
+    float percentDiff = abs(percentConstrained - estimated);
+    
+    // If the difference is too large (>20%), prefer voltage estimation
+    if (percentDiff > 20.0) {
+        Serial.print("⚠️ MAX17043 percent ("); Serial.print(percentConstrained, 1);
+        Serial.print("%) differs from voltage estimate ("); 
+        Serial.print(estimated, 1); Serial.print("%) - diff: ");
+        Serial.print(percentDiff, 1); Serial.println("%");
+        
+        // Try a quickstart recalibration if the difference is huge
+        if (percentDiff > 30.0) {
+            Serial.println("🔄 Large difference detected - attempting quickstart recalibration...");
+            FuelGauge.quickstart();
+            delay(1000);  // Wait for recalibration
+            
+            // Re-read after recalibration
+            float newPercent = FuelGauge.percent(true);
+            float newDiff = abs(newPercent - estimated);
+            
+            Serial.print("🔄 After quickstart: "); Serial.print(newPercent, 1);
+            Serial.print("% (diff: "); Serial.print(newDiff, 1); Serial.println("%)");
+            
+            if (newDiff < percentDiff) {
+                Serial.println("✅ Quickstart improved reading");
+                return (uint8_t)round(newPercent);
+            }
+        }
+        
+        Serial.println("🔄 Using voltage-based estimation instead");
+        return (uint8_t)round(estimated);
+    }
+
+    // If the MAX17043 shows very low % but voltage is good, use estimation
+    if (percentConstrained < 5.0 && voltage > 3.7) {
+        Serial.print("🔄 MAX17043 shows "); Serial.print(percentConstrained, 1);
         Serial.print("% but voltage is "); Serial.print(voltage, 3);
         Serial.println("V - using estimation");
-        
-        float estimated = estimateBatteryPercent(voltage);
         return (uint8_t)round(estimated);
     }
     
-    Serial.print("✅ Using MAX17043: "); Serial.print(percent, 1); Serial.println("%");
-    return (uint8_t)round(percent);
+    // If MAX17043 shows 100% but voltage < 4.0V, use estimation
+    if (percentConstrained > 95.0 && voltage < 4.0) {
+        Serial.print("🔄 MAX17043 shows "); Serial.print(percentConstrained, 1);
+        Serial.print("% but voltage is only "); Serial.print(voltage, 3);
+        Serial.println("V - using estimation");
+        return (uint8_t)round(estimated);
+    }
+    
+    Serial.print("✅ Using MAX17043: "); Serial.print(percentConstrained, 1); 
+    Serial.print("% (estimated: "); Serial.print(estimated, 1); Serial.println("%)");
+    return (uint8_t)round(percentConstrained);
 }
 
 float readSolarVoltage() {
@@ -206,11 +253,11 @@ void diagnosticMAX17043() {
     Serial.println("\n🔍 MAX17043 DIAGNOSTIC");
     Serial.println("======================");
     
-    float voltage = FuelGauge.voltage();
+    float voltage = FuelGauge.voltage() / 1000.0; // convert mV -> V
     float percent = FuelGauge.percent();
     float estimated = estimateBatteryPercent(voltage);
     
-    Serial.print("📊 Raw voltage: "); Serial.print(voltage, 3); Serial.println("V");
+    Serial.print("📊 Raw voltage: "); Serial.print(voltage, 3); Serial.println(" V");
     Serial.print("📊 Raw percent: "); Serial.print(percent, 2); Serial.println("%");
     Serial.print("💡 Estimated percent: "); Serial.print(estimated, 1); Serial.println("%");
     
@@ -330,7 +377,7 @@ void setup() {
     // Init capteurs
     initFuelGauge();
     
-    // Diagnostic MAX17043 si premier boot ou problème détecté
+    // MAX17043 diagnostics if first boot or problem detected
     if (bootCount <= 2) {
         diagnosticMAX17043();
     }
@@ -406,7 +453,7 @@ void sendTemperature() {
         return;
     }
     
-    // Lecture des données
+    // Read Data
     bool sht30_updated = sht30.update();
     bool qmp_updated = qmp.update();
     
@@ -458,6 +505,14 @@ void sendTemperature() {
         Serial.print(vbat, 3); Serial.println("V)");
         Serial.print("  Solar: "); Serial.print(vsolar, 3); Serial.println("V");
         
+        // Debug: print payload bytes (hex)
+        Serial.print("🔁 Payload (hex): ");
+        for (size_t i = 0; i < sizeof(payload); ++i) {
+            if (i) Serial.print(' ');
+            if (payload[i] < 16) Serial.print('0');
+            Serial.print(payload[i], HEX);
+        }
+        Serial.println();
         bool sent = node.sendPacket(payload, sizeof(payload));
         if (sent) {
             Serial.println("✅ Extended data transmission completed");
@@ -495,6 +550,14 @@ void sendTemperature() {
             Serial.println("  Pressure: Not available (QMP6988 failed)");
         }
         
+        // Debug: print payload bytes (hex)
+        Serial.print("🔁 Payload (hex): ");
+        for (size_t i = 0; i < sizeof(payload); ++i) {
+            if (i) Serial.print(' ');
+            if (payload[i] < 16) Serial.print('0');
+            Serial.print(payload[i], HEX);
+        }
+        Serial.println();
         bool sent = node.sendPacket(payload, sizeof(payload));
         if (sent) {
             Serial.println("✅ Basic data transmission completed");

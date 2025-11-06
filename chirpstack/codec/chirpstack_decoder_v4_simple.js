@@ -1,4 +1,3 @@
-/
 function decodeUplink(input) {
     const bytes = input.bytes;
     const fPort = input.fPort;
@@ -6,7 +5,7 @@ function decodeUplink(input) {
     
     if (bytes.length < 1) {
         return {
-            data: { error: "Payload trop court" }
+            data: { error: "Payload too short" }
         };
     }
     

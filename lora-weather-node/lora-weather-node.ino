@@ -14,12 +14,12 @@
 #define DATARATE DR5
 #define DBM16 16
 
-// I2C pins
-#define SDA_PIN 21
-#define SCL_PIN 22
+// I2C pins for ESP32-C6-DevKitC-1
+#define SDA_PIN 6     // Pin 5 -> GPIO6 (I2C_SDA)
+#define SCL_PIN 7     // Pin 6 -> GPIO7 (I2C_SCL)
 
-// Solar voltage ADC pin (A0 = GPIO 36)
-#define SOLAR_PIN 36
+// Solar voltage ADC pin for ESP32-C6-DevKitC-1
+#define SOLAR_PIN 0   // Pin 7 -> GPIO0 (ADC1_CH0)
 
 // Deep Sleep Configuration
 #define SLEEP_MINUTES 15          // 15 minutes between transmissions
@@ -27,8 +27,8 @@
 #define SLEEP_TIME_S (SLEEP_MINUTES * 60)
 
 // OTAA credentials
-const char APP_EUI[] = "XXXXXXXX";
-const char APP_KEY[] = "XXXXXXXX";
+const char APP_EUI[] = "xxxxxxxx";
+const char APP_KEY[] = "xxxxxxxx";
 
 // Instances M5Stack ENV
 DFRobot_LWNode_IIC node(APP_EUI, APP_KEY);
@@ -89,15 +89,40 @@ bool initFuelGauge() {
     Serial.print(percent, 1); Serial.print("% (");
     Serial.print(voltage, 3); Serial.println("V)");
 
-        // 4. If the percentage is still 0 with voltage > 3.7V, force an estimate
-        if (percent < 1.0 && voltage > 3.7) {
-            Serial.println("⚠️ MAX17043 needs manual calibration...");
+        // 4. If the percentage is still 0 with voltage > 3.7V, force multiple recalibrations
+        if (percent < 5.0 && voltage > 3.7) {
+            Serial.println("⚠️ MAX17043 needs aggressive recalibration...");
             
-            // Estimate based on standard LiPo voltage
-            float estimatedPercent = estimateBatteryPercent(voltage);
-            Serial.print("💡 Estimated percentage: ");
-            Serial.print(estimatedPercent, 1);
-            Serial.println("%");
+            // Multiple recalibration attempts
+            for (int i = 0; i < 3; i++) {
+                Serial.print("🔄 Recalibration attempt "); Serial.print(i + 1); Serial.println("/3");
+                
+                FuelGauge.reset();
+                delay(1000);
+                FuelGauge.quickstart();
+                delay(2000);
+                
+                float newPercent = FuelGauge.percent();
+                float newVoltage = FuelGauge.voltage() / 1000.0;
+                
+                Serial.print("📊 After attempt "); Serial.print(i + 1); 
+                Serial.print(": "); Serial.print(newPercent, 1);
+                Serial.print("% ("); Serial.print(newVoltage, 3); Serial.println("V)");
+                
+                if (newPercent > 5.0) {
+                    Serial.println("✅ Recalibration successful!");
+                    break;
+                }
+            }
+            
+            // Final check - if still 0%, the sensor might be defective
+            percent = FuelGauge.percent();
+            voltage = FuelGauge.voltage() / 1000.0;
+            
+            if (percent < 5.0 && voltage > 3.7) {
+                Serial.println("❌ MAX17043 recalibration failed - sensor may be defective");
+                Serial.println("🔄 Will use voltage-based estimation");
+            }
             
             // Configure the alert threshold to 10%
             FuelGauge.setThreshold(10);
@@ -179,8 +204,8 @@ uint8_t readBatteryPercent() {
     // Check if MAX17043 reading is reasonable compared to voltage
     float percentDiff = abs(percentConstrained - estimated);
     
-    // If the difference is too large (>20%), prefer voltage estimation
-    if (percentDiff > 20.0) {
+    // If the difference is too large (>15%), prefer voltage estimation
+    if (percentDiff > 15.0) {
         Serial.print("⚠️ MAX17043 percent ("); Serial.print(percentConstrained, 1);
         Serial.print("%) differs from voltage estimate ("); 
         Serial.print(estimated, 1); Serial.print("%) - diff: ");
@@ -209,6 +234,14 @@ uint8_t readBatteryPercent() {
         return (uint8_t)round(estimated);
     }
 
+    // Special case: 0% with high voltage = sensor problem
+    if (percentConstrained < 1.0 && voltage > 3.8) {
+        Serial.print("❌ MAX17043 critical error: "); Serial.print(percentConstrained, 1);
+        Serial.print("% with "); Serial.print(voltage, 3);
+        Serial.println("V - sensor likely defective, using estimation");
+        return (uint8_t)round(estimated);
+    }
+    
     // If the MAX17043 shows very low % but voltage is good, use estimation
     if (percentConstrained < 5.0 && voltage > 3.7) {
         Serial.print("🔄 MAX17043 shows "); Serial.print(percentConstrained, 1);

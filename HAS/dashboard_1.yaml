@@ -1,0 +1,58 @@
+square: false
+type: grid
+title: Sensor Lora 1
+cards:
+  - type: tile
+    entity: sensor.outdoor_temperature_lora
+    name: Température
+    icon: mdi:thermometer
+    vertical: false
+    features_position: bottom
+  - type: tile
+    entity: sensor.outdoor_humidity_lora
+    name: Humidity
+    icon: mdi:water-percent
+  - type: tile
+    entity: sensor.atmospheric_pressure_Lora
+    name: Pression
+    icon: mdi:car-brake-low-pressure
+  - type: tile
+    entity: sensor.altitude_lora
+    name: Altitude
+    icon: mdi:altimeter
+  - type: custom:mushroom-template-card
+    entity: sensor.battery_percentage_lora
+    icon: |
+      {% if states('sensor.battery_percentage_lora') | float <= 10 %}
+       mdi:battery-10
+      {% elif states('sensor.battery_percentage_lora') | float <= 20 %}
+       mdi:battery-20
+      {% elif states('sensor.battery_percentage_lora') | float <= 50 %}
+       mdi:battery-50
+      {% elif states('sensor.battery_percentage_lora') | float <= 80 %}
+       mdi:battery-80
+      {% else %}
+      mdi:battery
+      {% endif %} 
+    primary: |
+      {{ states('sensor.battery_percentage_lora') | float | round(2) }} %
+    layout: horizontal
+    fill_container: true
+    icon_color: |
+      {% if states('sensor.battery_percentage_lora') | float <= 10 %}
+      red
+      {% elif states('sensor.battery_percentage_lora) | float <= 20 %}
+      orange
+      {% elif states('sensor.battery_percentage_lora') | float <= 50 %}
+      yellow
+      {% elif states('sensor.battery_percentage_lora') | float <= 80 %}
+      #b2ff33
+      {% else %}
+      green
+      {% endif %}
+  - type: tile
+    entity: switch.weather_station_charge
+    name: 5V charger
+    toggle: true
+    icon: mdi:battery-charging-high
+columns: 3

@@ -1,0 +1,214 @@
+mqtt:
+  sensor:
+    - name: "Outdoor Temperature LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      unit_of_measurement: "°C"
+      device_class: "temperature"
+      value_template: "{{ value_json.object.temperature | default(value_json.data.temperature) }}"
+      icon: "mdi:thermometer"
+      unique_id: "0x200967_temperature_outdoor_lora_esp32_1"
+
+    - name: "Outdoor Humidity LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      unit_of_measurement: "%"
+      device_class: "humidity"
+      value_template: "{{ value_json.object.humidity | default(value_json.data.humidity) }}"
+      icon: "mdi:water-percent"
+      unique_id: "0x200967_humidity_outdoor_lora_esp32_1"
+
+    - name: "Battery Percentage LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      unit_of_measurement: "%"
+      device_class: "battery"
+      value_template: "{{ value_json.object.battery_percent | default(value_json.data.battery_percent)}}"
+      icon: "mdi:battery"
+      unique_id: "0x200967_battery_percentage_outdoor_lora_esp32_1"
+
+    - name: "Solar Panel Voltage LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      unit_of_measurement: "V"
+      device_class: "voltage"
+      value_template: "{{ value_json.object.solar_voltage}}"
+      icon: "mdi:solar-power"
+      unique_id: "0x200967_solar_panel_voltage_lora_esp32_1"
+
+    - name: "Atmospheric Pressure LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      unit_of_measurement: "hPa"
+      device_class: "pressure"
+      value_template: "{{ value_json.object.pressure}}"
+      icon: "mdi:gauge"
+      unique_id: "0x200967_pressure_lora_esp32_1"
+
+    - name: "Altitude LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      unit_of_measurement: "m"
+      value_template: "{{ value_json.object.altitude}}"
+      icon: "mdi:altimeter"
+      unique_id: "0x200967_altitude_lora_esp32_1"
+
+input_number:
+  solar_station_battery_capacity_mah:
+    name: Solar Station - Battery Capacity
+    min: 500
+    max: 20000
+    step: 50
+    unit_of_measurement: "mAh"
+    icon: mdi:battery
+    initial: 2000
+
+  solar_station_charging_current_ma:
+    name: Solar Station - Charging Current
+    min: 50
+    max: 2000
+    step: 50
+    unit_of_measurement: "mA"
+    icon: mdi:current-dc
+    # Default USB power ≈ 500 mA
+    initial: 500
+
+binary_sensor:
+  - platform: template
+    sensors:
+      solar_station_pv_presence:
+        friendly_name: "Solar Station - PV Presence"
+        value_template: >-
+          {% set v = states('sensor.solar_panel_voltage_lora')|float(0) %}
+          {% set prev = states('binary_sensor.solar_station_pv_presence') %}
+          {% set on_th = 4.7 %}
+          {% set off_th = 4.3 %}
+          {% if prev == 'on' %}
+            {{ v >= off_th }}
+          {% else %}
+            {{ v >= on_th }}
+          {% endif %}
+        icon_template: >-
+          {% if is_state('binary_sensor.solar_station_pv_presence', 'on') %}
+            mdi:white-balance-sunny
+          {% else %}
+            mdi:weather-night
+          {% endif %}
+        availability_template: "{{ states('sensor.solar_panel_voltage_lora') not in ['unknown','unavailable'] }}"
+
+  - platform: template
+    sensors:
+      solar_station_night:
+        friendly_name: "Solar Station - Night"
+        value_template: >-
+          {% set elev = state_attr('sun.sun','elevation')|float(0) %}
+          {{ elev < -4 }}
+        icon_template: mdi:weather-night
+
+template:
+  - sensor:
+      - name: "Solar Station - Power Source"
+        unique_id: solar_station_power_source
+        state: >-
+          {% set pv = is_state('binary_sensor.solar_station_pv_presence','on') %}
+          {% set usb = is_state('switch.weather_station_charger','on') %}
+          {% if usb %} USB
+          {% elif pv %} SOLAR
+          {% else %} BATTERY
+          {% endif %}
+        icon: >-
+          {% if this.state == 'USB' %} mdi:power-plug-battery
+          {% elif this.state == 'SOLAR' %} mdi:solar-power
+          {% else %} mdi:battery
+          {% endif %}
+
+      - name: "Solar Station - Charging State"
+        unique_id: solar_station_charging_state
+        availability: >-
+          {{ states('sensor.battery_percentage_lora') not in ['unknown','unavailable'] and
+             states('sensor.solar_station_power_source') not in ['unknown','unavailable'] }}
+        state: >-
+          {% set source = states('sensor.solar_station_power_source') %}
+          {% set batt_pct = states('sensor.battery_percentage_lora')|float(0) %}
+          {% set rising = is_state('binary_sensor.solar_station_battery_rising','on') %}
+          {% if source in ['USB','SOLAR'] and rising and batt_pct < 99 %}
+            Charging Active
+          {% elif source in ['USB','SOLAR'] and batt_pct >= 99 %}
+            Charging Complete
+          {% elif source == 'BATTERY' %}
+            Discharging
+          {% else %}
+            Unknown
+          {% endif %}
+        icon: >-
+          {% set s = this.state %}
+          {% if s == 'Charging Active' %} mdi:battery-charging
+          {% elif s == 'Charging Complete' %} mdi:battery-check
+          {% elif s == 'Discharging' %} mdi:battery-low
+          {% else %} mdi:help-circle
+          {% endif %}
+
+      - name: "Solar Station - Charging Need"
+        unique_id: solar_station_charging_need
+        state: >-
+          {% set pv = is_state('binary_sensor.solar_station_pv_presence','on') %}
+          {% set night = is_state('binary_sensor.solar_station_night','on') %}
+          {% set usb = is_state('switch.weather_station_charger','on') %}
+          {% set batt = states('sensor.battery_percentage_lora')|float(0) %}
+          {% if not usb and (night or not pv) and batt < 20 %} YES
+          {% elif usb and (batt >= 95 or pv) %} NO
+          {% elif usb and batt < 95 %} CHARGING_IN_PROGRESS
+          {% else %} NO
+          {% endif %}
+        icon: >-
+          {% if this.state == 'YES' %} mdi:battery-charging-wireless-alert
+          {% elif this.state == 'CHARGING_IN_PROGRESS' %} mdi:battery-charging-wireless
+          {% else %} mdi:battery-check
+          {% endif %}
+
+      - name: "Solar Station - Remaining Charge Time"
+        unique_id: solar_station_charge_time
+        unit_of_measurement: "h"
+        state: >-
+          {% set batt = states('sensor.battery_percentage_lora')|float(0) %}
+          {% set usb = is_state('switch.weather_station_charger','on') %}
+          {% set cap = states('input_number.solar_station_battery_capacity_mah')|float(2000) %}
+          {% set cur = states('input_number.solar_station_charging_current_ma')|float(500) %}
+          {% set eff = 0.9 %}
+          {% if usb and batt < 95 and cur > 0 %}
+            {% set mah = (cap * (95 - batt) / 100) / eff %}
+            {{ (mah / cur)|round(2) }}
+          {% else %} 0
+          {% endif %}
+
+      - name: "Solar Station - Power"
+        unique_id: solar_station_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set v = states('sensor.solar_panel_voltage_lora')|float(0) %}
+          {{ (v * 0.5)|round(2) if v >= 4.3 else 0 }}
+
+recorder:
+  include:
+    entities:
+      - sensor.outdoor_temperature_lora
+      - sensor.outdoor_humidity_lora
+      - sensor.battery_percentage_lora
+      - sensor.solar_panel_voltage_lora
+      - sensor.solar_station_power
+      - sensor.solar_station_charging_state
+      - sensor.daily_solar_energy
+      - sensor.monthly_solar_energy
+
+# Utility Meters for Daily/Monthly Statistics
+utility_meter:
+  # Daily solar energy production
+  daily_solar_energy:
+    source: sensor.solar_station_power
+    cycle: daily
+    name: "Daily Solar Production"
+    unit_of_measurement: "Wh"
+
+  # Monthly solar energy production
+  monthly_solar_energy:
+    source: sensor.solar_station_power
+    cycle: monthly
+    name: "Monthly Solar Production"
+    unit_of_measurement: "Wh"
+

@@ -1,0 +1,161 @@
+automation:
+  # 1. Automatic Charging Start
+  - id: solar_station_auto_charge_on
+    alias: Solar Station - Auto Charge Start
+    description: Automatically starts 5V charging when needed
+    triggers:
+      # Trigger when charging is needed for 5 minutes
+      - trigger: state
+        entity_id: sensor.solar_station_charging_need
+        to: "YES"
+        for:
+          minutes: 5
+      # Check every 2 hours as backup
+      - trigger: time_pattern
+        hours: /2
+    conditions:
+      # Only charge if really needed
+      - condition: state
+        entity_id: sensor.solar_station_charging_need
+        state: "YES"
+      # Safety: don't charge if battery critically low (protect from deep discharge)
+      - condition: numeric_state
+        entity_id: sensor.battery_percentage_lora
+        above: 10
+      # Don't restart charging too quickly (30min cooldown)
+      - condition: template
+        value_template: >-
+          {{ (now() - states.switch.weather_station_charger.last_changed).total_seconds() > 1800 }}
+    actions:
+      # Turn on USB charger
+      - action: switch.turn_on
+        target:
+          entity_id: switch.weather_station_charger
+      # Send mobile notification with current status
+      - action: notify.mobile_app_iphone_de_manu
+        data:
+          title: "🔋 Solar Station"
+          message: >-
+            Auto charging started
+            Battery: {{ states('sensor.battery_percentage_lora') }}%
+            Solar: {{ states('sensor.solar_panel_voltage_lora') }}V
+            Estimated time: {{ states('sensor.solar_station_charge_time') }}h
+          data:
+            actions:
+              - action: STOP_CHARGE
+                title: Stop charging
+    mode: single
+
+  # 2. Automatic Charging Stop
+  - id: solar_station_auto_charge_off
+    alias: Solar Station - Auto Charge Stop
+    description: Automatically stops 5V charging when complete
+    triggers:
+      # Stop when no longer needed (battery full or solar resumed)
+      - trigger: state
+        entity_id: sensor.solar_station_charging_need
+        to: "NO"
+        for:
+          minutes: 2
+      # Safety timeout: max 8 hours continuous charging
+      - trigger: state
+        entity_id: switch.weather_station_charger
+        to: "on"
+        for:
+          hours: 8
+    conditions:
+      # Only act if charger is currently on
+      - condition: state
+        entity_id: switch.weather_station_charger
+        state: "on"
+    actions:
+      # Turn off USB charger
+      - action: switch.turn_off
+        target:
+          entity_id: switch.weather_station_charger
+      # Notification with reason for stopping
+      - action: notify.mobile_app_iphone_de_manu
+        data:
+          title: "✅ Solar Station"
+          message: >-
+            Charging completed automatically
+            Battery: {{ states('sensor.battery_percentage_lora') }}%
+            Solar: {{ states('sensor.solar_panel_voltage_lora') }}V
+            {% if trigger.id == 'solar_station_auto_charge_off' %}
+            Reason: Battery full or solar resumed
+            {% else %}
+            Reason: Safety - maximum duration reached
+            {% endif %}
+    mode: single
+
+  # 3. Manual Stop from Mobile Notification
+  - id: solar_station_stop_charge_action
+    alias: Solar Station - Manual Charge Stop
+    description: Manual stop via mobile notification action
+    triggers:
+      # Triggered by mobile notification action button
+      - trigger: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: STOP_CHARGE
+    actions:
+      # Turn off charger
+      - action: switch.turn_off
+        target:
+          entity_id: switch.weather_station_charger
+      # Confirmation notification
+      - action: notify.mobile_app_iphone_de_manu
+        data:
+          title: "🛑 Solar Station"
+          message: "Charging stopped manually"
+
+  # 4. Charging Conflict Alert
+  - id: solar_station_charging_conflict
+    alias: Solar Station - Charging Conflict Alert
+    description: Alert if 5V charging active during solar production
+    triggers:
+      # Trigger when solar voltage indicates good production
+      - trigger: numeric_state
+        entity_id: sensor.solar_panel_voltage_lora
+        above: 4.2
+        for:
+          minutes: 10
+    conditions:
+      # Only alert if USB charger is on
+      - condition: state
+        entity_id: switch.weather_station_charger
+        state: "on"
+      # Only during daylight hours
+      - condition: sun
+        after: sunrise
+        before: sunset
+    actions:
+      # Warning notification about inefficient charging
+      - action: notify.mobile_app_iphone_de_manu
+        data:
+          title: "⚠️ Solar Station - Conflict"
+          message: >-
+            5V charging active while solar is producing!
+            Solar: {{ states('sensor.solar_panel_voltage_lora') }}V
+            Suggestion: Stop 5V charging
+          data:
+            actions:
+              - action: STOP_CHARGE
+                title: Stop 5V charging
+
+  # 5. Battery Full Safety Stop
+  - id: solar_station_battery_full_stop
+    alias: Solar Station - Battery Full Stop
+    description: Safety stop when battery reaches 100%
+    triggers:
+      # Trigger when battery is completely full
+      - trigger: numeric_state
+        entity_id: sensor.battery_percentage_lora
+        above: 99
+    conditions: []
+    actions:
+      # Turn off charger to prevent overcharging
+      - action: switch.turn_off
+        target:
+          entity_id: switch.weather_station_charger
+    mode: single

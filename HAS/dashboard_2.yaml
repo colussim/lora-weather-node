@@ -1,0 +1,51 @@
+type: vertical-stack
+cards:
+  - type: markdown
+    title: 📋 Daily Summary
+    content: |
+      **Solar Weather Station - {{ now().strftime('%d/%m/%Y') }}**
+
+      🌡️ **Temperature:** {{ states('sensor.outdoor_temperature_lora') }}°C
+      💧 **Humidity:** {{ states('sensor.outdoor_humidity_lora') }}%
+      🔋 **Battery:** {{ states('sensor.battery_percentage_lora') }}%
+      ☀️ **Solar Panel:** {{ states('sensor.solar_panel_voltage_lora') }}V
+      ⚡ **Status:** {{ states('sensor.solar_station_charging_state') }}
+
+      ---
+
+      **Estimated Production:**
+      - Today: {{ states('sensor.daily_solar_energy') }} Wh
+      - Ce mois: {{ states('sensor.monthly_solar_energy') }} Wh
+
+
+         
+      **Last update:** {{ now().strftime('%H:%M') }}
+  - type: markdown
+    content: >
+      {% set battery = states('sensor.battery_percentage_lora') | float(0) %}
+
+      {% if battery > 0 and battery < 20 %}
+
+      🚨 **ALERTE: Low Battery**
+
+
+      The station's battery is at {{ battery }}%.
+
+      Check the solar output and the condition of the panel.
+
+      {% endif %}
+
+
+      {% set voltage = states('sensor.solar_panel_voltage_lora') | float(0)
+      %}
+
+      {% if voltage > 0 and voltage < 3.0 %}
+
+      ⚠️ **ATTENTION: No Solar Charge**
+
+
+      Panel voltage: {{ voltage }}V
+
+      Check the sun exposure or condition of the panel.
+
+      {% endif %}

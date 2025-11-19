@@ -569,9 +569,7 @@ recorder:
       - sensor.solar_panel_voltage_lora
       - sensor.solar_station_power
       - sensor.solar_station_charging_state
-      - sensor.daily_solar_energy
-      - sensor.monthly_solar_energy
-
+     
 # Utility Meters for Daily/Monthly Statistics
 utility_meter:
   # Daily solar energy production
@@ -893,6 +891,14 @@ cards:
 - **Current Consumption**: 
   - Active: ~150mA
   - Deep Sleep: <1mA
+
+Separate reference file (PRESSURE_CORRECTION_REFERENCE.md) containing:
+
+📏 Detailed formulas and calculations
+🗺️ Examples for common Swiss cities
+🌤️ Complete weather classification table
+⚠️ Troubleshooting and validation guide
+📈 Expected performance metrics
 
 ---
 

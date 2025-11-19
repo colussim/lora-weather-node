@@ -219,8 +219,7 @@ recorder:
       - sensor.solar_panel_voltage_lora
       - sensor.solar_station_power
       - sensor.solar_station_charging_state
-      - sensor.daily_solar_energy
-      - sensor.monthly_solar_energy
+     
 
 # Utility Meters for Daily/Monthly Statistics
 utility_meter:

@@ -27,6 +27,14 @@ function decodeUplink(input) {
         const pressure_raw = (bytes[5] << 8) | bytes[6];
         decoded.pressure = pressure_raw / 10;
         
+        // Local pressure validation (adjusted for Swiss altitude)
+        if (decoded.pressure < 850 || decoded.pressure > 1100) {
+            decoded.pressure_warning = "Out of normal range (850-1100 hPa) - sensor may be faulty";
+        }
+        if (decoded.pressure < 900 || decoded.pressure > 1050) {
+            decoded.pressure_alert = "Extreme value detected";
+        }
+        
         // Altitude (m, signed)
         let alt_raw = (bytes[7] << 8) | bytes[8];
         if (alt_raw > 32767) alt_raw -= 65536;
@@ -41,12 +49,18 @@ function decodeUplink(input) {
         
         // Additional calculations
         
-        // Sea level pressure
+        // Sea level pressure with diagnostic info (CORRECTED FORMULA)
         if (decoded.altitude > 0) {
+            // Formule barométrique internationale correcte
             const factor = Math.pow(1 - (0.0065 * decoded.altitude) / (decoded.temperature + 273.15), -5.257);
-            decoded.sea_level_pressure = Math.round(decoded.pressure / factor * 10) / 10;
+            decoded.sea_level_pressure = Math.round(decoded.pressure * factor * 10) / 10;  // MULTIPLY, don't divide!
+            
+            // Debug info for Swiss altitude correction
+            decoded.altitude_correction = Math.round((decoded.sea_level_pressure - decoded.pressure) * 10) / 10;
+            decoded.pressure_factor = Math.round(factor * 1000) / 1000;
         } else {
             decoded.sea_level_pressure = decoded.pressure;
+            decoded.altitude_correction = 0;
         }
         
         // Comfort index
@@ -62,17 +76,94 @@ function decodeUplink(input) {
             decoded.comfort_index = "Inconfortable";
         }
         
-        // Weather state
-        if (decoded.pressure > 1020) {
-            decoded.weather_state = "Stable";
-        } else if (decoded.pressure > 1013) {
-            decoded.weather_state = "Amélioration";
-        } else if (decoded.pressure > 1000) {
-            decoded.weather_state = "Variable";
-        } else if (decoded.pressure > 990) {
-            decoded.weather_state = "Dégradation";
+        // Advanced Weather State Classification
+        // Based on sea level pressure (corrected for altitude) - Swiss/Alpine regions
+        let weatherState = "Unknown";
+        let weatherIcon = "unknown";
+        
+        // Use sea level pressure for weather classification (not local pressure)
+        const weatherPressure = decoded.sea_level_pressure;
+        
+        // Validation: realistic pressure at sea level for weather (960-1080 hPa)
+        const pressureValid = weatherPressure >= 960 && weatherPressure <= 1080;
+        
+        if (!pressureValid) {
+            weatherState = "Sensor Error";
+            weatherIcon = "alert";
+            decoded.weather_error = `Sea level pressure ${weatherPressure} hPa is outside realistic range (970-1070)`;
         } else {
-            decoded.weather_state = "Instable";
+            // Weather classification based on sea level pressure (Switzerland/Alps)
+            if (weatherPressure > 1030) {
+                weatherState = "High Pressure";
+                weatherIcon = "sunny";
+            } else if (weatherPressure > 1020) {
+                weatherState = "Stable";
+                weatherIcon = "partly-cloudy";
+            } else if (weatherPressure > 1013) {
+                weatherState = "Improving";
+                weatherIcon = "partly-sunny";
+            } else if (weatherPressure > 1005) {
+                weatherState = "Variable";
+                weatherIcon = "cloudy";
+            } else if (weatherPressure > 995) {
+                weatherState = "Unsettled"; 
+                weatherIcon = "cloudy";
+            } else if (weatherPressure > 980) {
+                weatherState = "Low Pressure";
+                weatherIcon = "rainy";
+            } else {
+                weatherState = "Storm Risk";  // Seulement < 980 hPa niveau mer
+                weatherIcon = "lightning-rainy";
+            }
+        }
+        
+        // Secondary classification by humidity (moisture content)
+        let humidityState = "Normal";
+        if (decoded.humidity > 85) {
+            humidityState = "Very Humid";
+        } else if (decoded.humidity > 70) {
+            humidityState = "Humid";
+        } else if (decoded.humidity > 60) {
+            humidityState = "Moderate";
+        } else if (decoded.humidity > 40) {
+            humidityState = "Normal";
+        } else if (decoded.humidity > 25) {
+            humidityState = "Dry";
+        } else {
+            humidityState = "Very Dry";
+        }
+        
+        // Temperature classification
+        let tempState = "Mild";
+        if (decoded.temperature > 30) {
+            tempState = "Hot";
+        } else if (decoded.temperature > 25) {
+            tempState = "Warm";
+        } else if (decoded.temperature > 15) {
+            tempState = "Mild";
+        } else if (decoded.temperature > 5) {
+            tempState = "Cool";
+        } else if (decoded.temperature > 0) {
+            tempState = "Cold";
+        } else {
+            tempState = "Freezing";
+        }
+        
+        // Combined weather assessment
+        decoded.weather_state = weatherState;
+        decoded.weather_icon = weatherIcon;
+        decoded.humidity_state = humidityState;
+        decoded.temperature_state = tempState;
+        
+        // Weather trend (based on sea level pressure - Swiss/Alpine regions)
+        if (weatherPressure > 1020) {
+            decoded.weather_trend = "Stable to Improving";
+        } else if (weatherPressure > 1005) {
+            decoded.weather_trend = "Variable";
+        } else if (weatherPressure > 990) {
+            decoded.weather_trend = "Unsettled";  
+        } else {
+            decoded.weather_trend = "Deteriorating";
         }
         
         decoded.payload_type = "weather_extended";

@@ -46,6 +46,32 @@ mqtt:
       value_template: "{{ value_json.object.altitude}}"
       icon: "mdi:altimeter"
       unique_id: "0x200967_altitude_lora_esp32_1"
+   
+   - name: "Weather State LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      value_template: "{{ value_json.object.weather_state | default(value_json.data.weather_state) }}"
+      icon: "mdi:weather-partly-cloudy"
+      unique_id: "0x200967_weather_state_lora_esp32_1"
+
+    - name: "Weather Trend LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      value_template: "{{ value_json.object.weather_trend | default(value_json.data.weather_trend) }}"
+      icon: "mdi:trending-up"
+      unique_id: "0x200967_weather_trend_lora_esp32_1"
+
+    - name: "Weather Icon LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      value_template: "{{ value_json.object.weather_icon | default(value_json.data.weather_icon) }}"
+      icon: "mdi:weather-sunny"
+      unique_id: "0x200967_weather_icon_lora_esp32_1"
+
+    - name: "Comfort Index LoRa"
+      state_topic: "application/654057e9-61c8-42f4-a53b-1d7db288fd60/device/84be8b002054f91f/event/up"
+      value_template: "{{ value_json.object.comfort_index | default(value_json.data.comfort_index) }}"
+      icon: "mdi:account-check"
+      unique_id: "0x200967_comfort_index_lora_esp32_1"
+
+
 
 input_number:
   solar_station_battery_capacity_mah:

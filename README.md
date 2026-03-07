@@ -3,7 +3,8 @@
 [![Arduino](https://img.shields.io/badge/Arduino-ESP32-blue.svg)](https://www.arduino.cc/)
 [![LoRaWAN](https://img.shields.io/badge/LoRaWAN-ChirpStack-green.svg)](https://www.chirpstack.io/)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Integration-orange.svg)](https://www.home-assistant.io/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)![Quality Gate](imgs/badges/sonarqube-quality-gate.svg)
+
 
 ![banner.png](imgs/banner.png)
 A comprehensive solar-powered LoRaWAN weather station built with ESP32, featuring comprehensive sensor monitoring, intelligent battery management, and seamless Home Assistant integration.
